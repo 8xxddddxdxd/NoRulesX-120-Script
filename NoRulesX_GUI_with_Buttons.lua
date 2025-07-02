@@ -1,10 +1,16 @@
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 
+-- حذف الواجهة لو كانت موجودة
 if CoreGui:FindFirstChild("NoRulesX_GUI") then
     CoreGui.NoRulesX_GUI:Destroy()
 end
+
+local player = Players.LocalPlayer
 
 local screenGui = Instance.new("ScreenGui", CoreGui)
 screenGui.Name = "NoRulesX_GUI"
@@ -12,7 +18,7 @@ screenGui.ResetOnSpawn = false
 
 -- الإطار الرئيسي
 local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 400, 0, 320)  -- زدت الارتفاع عشان تستوعب الأزرار الجديدة
+mainFrame.Size = UDim2.new(0, 400, 0, 320)
 mainFrame.Position = UDim2.new(0.5, 0, 0.15, 0)
 mainFrame.AnchorPoint = Vector2.new(0.5, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 40)
@@ -84,6 +90,8 @@ local function fadeOut()
     tween:Play()
     tween.Completed:Connect(function()
         mainFrame.Visible = false
+        followButton.Visible = false
+        devFrame.Visible = false
     end)
 end
 
@@ -91,16 +99,16 @@ toggleButton.MouseButton1Click:Connect(function()
     if guiVisible then
         guiVisible = false
         fadeOut()
-        devFrame.Visible = false  -- اخفاء واجهة المطورين مع الواجهة الرئيسية
     else
         guiVisible = true
         fadeIn()
+        followButton.Visible = true
     end
 end)
 
 -- مربع النص للبحث
 local searchBox = Instance.new("TextBox", mainFrame)
-searchBox.Size = UDim2.new(0, 250, 0, 40)
+searchBox.Size = UDim2.new(0, 360, 0, 40)
 searchBox.Position = UDim2.new(0, 20, 0, 20)
 searchBox.PlaceholderText = "Search scripts..."
 searchBox.ClearTextOnFocus = false
@@ -110,55 +118,81 @@ searchBox.BorderSizePixel = 0
 searchBox.Font = Enum.Font.Gotham
 searchBox.TextSize = 20
 
--- زر Search
-local searchButton = Instance.new("TextButton", mainFrame)
-searchButton.Size = UDim2.new(0, 90, 0, 40)
-searchButton.Position = UDim2.new(0, 280, 0, 20)
-searchButton.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
-searchButton.Text = "Search"
-searchButton.Font = Enum.Font.GothamBold
-searchButton.TextSize = 20
-searchButton.TextColor3 = Color3.new(1,1,1)
-searchButton.BorderSizePixel = 0
+-- عرض نتائج البحث (كمجموعة أزرار)
+local resultsFrame = Instance.new("Frame", mainFrame)
+resultsFrame.Size = UDim2.new(0, 360, 0, 180)
+resultsFrame.Position = UDim2.new(0, 20, 0, 70)
+resultsFrame.BackgroundTransparency = 1
+resultsFrame.ClipsDescendants = true
 
--- زر تشغيل سكربت Slap Tower 4 Teleport
-local slapTowerButton = Instance.new("TextButton", mainFrame)
-slapTowerButton.Size = UDim2.new(0, 180, 0, 40)
-slapTowerButton.Position = UDim2.new(0, 20, 0, 70)
-slapTowerButton.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
-slapTowerButton.Text = "SlapTower4 Teleport"
-slapTowerButton.Font = Enum.Font.GothamBold
-slapTowerButton.TextSize = 18
-slapTowerButton.TextColor3 = Color3.new(1,1,1)
-slapTowerButton.BorderSizePixel = 0
+-- السكربتات اللي نعرضها كمقترحات بحث
+local scriptsList = {
+    {
+        name = "SlapTower4 Teleport",
+        url = "https://raw.githubusercontent.com/8xxddddxdxd/Slap-Tower-4-Teleport-By-Team-EVIL/main/SlapTower4_Teleport.lua"
+    },
+    {
+        name = "Team EVIL Speed GUI",
+        url = "https://raw.githubusercontent.com/8xxddddxdxd/Team-Evil-Speed-Gui/refs/heads/main/TeamEVIL_SpeedGUI.lua"
+    }
+}
 
--- زر تشغيل سكربت Team EVIL Speed GUI
-local teamEvilButton = Instance.new("TextButton", mainFrame)
-teamEvilButton.Size = UDim2.new(0, 180, 0, 40)
-teamEvilButton.Position = UDim2.new(0, 210, 0, 70)
-teamEvilButton.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
-teamEvilButton.Text = "Team EVIL Speed GUI"
-teamEvilButton.Font = Enum.Font.GothamBold
-teamEvilButton.TextSize = 18
-teamEvilButton.TextColor3 = Color3.new(1,1,1)
-teamEvilButton.BorderSizePixel = 0
+local function clearResults()
+    for _, child in pairs(resultsFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+end
 
--- عرض نتائج البحث
-local resultsLabel = Instance.new("TextLabel", mainFrame)
-resultsLabel.Size = UDim2.new(0, 360, 0, 140)
-resultsLabel.Position = UDim2.new(0, 20, 0, 120)
-resultsLabel.BackgroundTransparency = 1
-resultsLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-resultsLabel.TextWrapped = true
-resultsLabel.Text = "No scripts available."
-resultsLabel.Font = Enum.Font.Gotham
-resultsLabel.TextSize = 18
-resultsLabel.TextXAlignment = Enum.TextXAlignment.Left
+local function updateResults(query)
+    clearResults()
+    if query == "" then return end
+    local y = 0
+    local loweredQuery = query:lower()
+    local found = false
+    for _, scriptInfo in pairs(scriptsList) do
+        if scriptInfo.name:lower():find(loweredQuery) then
+            found = true
+            local btn = Instance.new("TextButton", resultsFrame)
+            btn.Size = UDim2.new(1, 0, 0, 40)
+            btn.Position = UDim2.new(0, 0, 0, y)
+            btn.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+            btn.Text = scriptInfo.name
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 18
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.BorderSizePixel = 0
+            btn.AutoButtonColor = true
+
+            btn.MouseButton1Click:Connect(function()
+                loadstring(game:HttpGet(scriptInfo.url))()
+            end)
+
+            y = y + 45
+        end
+    end
+    if not found then
+        local lbl = Instance.new("TextLabel", resultsFrame)
+        lbl.Size = UDim2.new(1, 0, 0, 40)
+        lbl.Position = UDim2.new(0, 0, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+        lbl.Text = "No scripts found."
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 18
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+    end
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updateResults(searchBox.Text)
+end)
 
 -- قائمة المطورين داخل mainFrame يمينها
 local devFrame = Instance.new("Frame", mainFrame)
 devFrame.Size = UDim2.new(0, 150, 0, 200)
-devFrame.Position = UDim2.new(1, -155, 0, 120)
+devFrame.Position = UDim2.new(1, -155, 0, 70)
 devFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 50)
 devFrame.BackgroundTransparency = 0.1
 devFrame.BorderSizePixel = 0
@@ -198,7 +232,7 @@ end
 -- زر عرض/إخفاء قائمة المطورين
 local devsButton = Instance.new("TextButton", mainFrame)
 devsButton.Size = UDim2.new(0, 90, 0, 40)
-devsButton.Position = UDim2.new(0, 280, 0, 120)
+devsButton.Position = UDim2.new(0, 280, 0, 260)
 devsButton.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
 devsButton.Text = "Developers"
 devsButton.Font = Enum.Font.GothamBold
@@ -210,22 +244,95 @@ devsButton.MouseButton1Click:Connect(function()
     devFrame.Visible = not devFrame.Visible
 end)
 
--- وظيفة البحث (فارغة حالياً)
-searchButton.MouseButton1Click:Connect(function()
-    local query = searchBox.Text:lower()
-    if query == "" then
-        resultsLabel.Text = "Please enter a search term."
-        return
-    end
-    resultsLabel.Text = "Searching for: " .. query .. "\nNo scripts found."
+-- ===========================
+-- سكربت المتابعة FollowGui
+-- ===========================
+
+local followGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+followGui.Name = "FollowGui"
+followGui.ResetOnSpawn = false
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 60, 0, 60)
+button.Position = UDim2.new(1, -70, 0, 10)
+button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Text = "تشغيل"
+button.Font = Enum.Font.GothamBold
+button.TextScaled = true
+button.Name = "FollowButton"
+button.Parent = followGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = button
+
+local following = false
+local isPlayerMoving = false
+local pressedKeys = {}
+
+UIS.InputBegan:Connect(function(input, gpe)
+	if not gpe and input.UserInputType == Enum.UserInputType.Keyboard then
+		pressedKeys[input.KeyCode] = true
+		isPlayerMoving = true
+	end
 end)
 
--- تشغيل سكربت Slap Tower 4 Teleport
-slapTowerButton.MouseButton1Click:Connect(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/8xxddddxdxd/Slap-Tower-4-Teleport-By-Team-EVIL/main/SlapTower4_Teleport.lua"))()
+UIS.InputEnded:Connect(function(input, gpe)
+	if not gpe and input.UserInputType == Enum.UserInputType.Keyboard then
+		pressedKeys[input.KeyCode] = nil
+		if next(pressedKeys) == nil then
+			isPlayerMoving = false
+		end
+	end
 end)
 
--- تشغيل سكربت Team EVIL Speed GUI
-teamEvilButton.MouseButton1Click:Connect(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/8xxddddxdxd/Team-Evil-Speed-Gui/refs/heads/main/TeamEVIL_SpeedGUI.lua"))()
+local function getNearestPlayer()
+	local closest, shortest = nil, math.huge
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local myChar = player.Character
+			if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+				local dist = (myChar.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).Magnitude
+				if dist < shortest then
+					shortest = dist
+					closest = p
+				end
+			end
+		end
+	end
+	return closest
+end
+
+local followConnection
+local function followNearest()
+	local char = player.Character or player.CharacterAdded:Wait()
+	local humanoid = char:WaitForChild("Humanoid")
+	local hrp = char:WaitForChild("HumanoidRootPart")
+
+	followConnection = RunService.Heartbeat:Connect(function()
+		if not following then return end
+		if isPlayerMoving then return end
+
+		local target = getNearestPlayer()
+		if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+			local destination = target.Character.HumanoidRootPart.Position
+			humanoid:MoveTo(destination)
+		end
+	end)
+end
+
+button.MouseButton1Click:Connect(function()
+	following = not following
+	button.Text = following and "إيقاف" or "تشغيل"
+	if following then
+		if not followConnection then
+			followNearest()
+		end
+	else
+		if followConnection then
+			followConnection:Disconnect()
+			followConnection = nil
+		end
+	end
 end)
